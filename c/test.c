@@ -27,7 +27,7 @@ float* create_vectors(size_t const count, size_t const dimensions) {
 }
 
 usearch_init_options_t create_options(size_t const dimensions) {
-    usearch_init_options_t opts;
+    usearch_init_options_t opts = {};
     opts.connectivity = 3; // 32 in faiss
     opts.dimensions = dimensions;
     opts.expansion_add = 40;    // 40 in faiss
