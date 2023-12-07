@@ -306,3 +306,29 @@ Extending metrics in SimSIMD:
 ```sh
 git push --set-upstream https://github.com/ashvardanian/simsimd.git HEAD:main
 ```
+
+## SQLite3
+
+```py
+conn = sqlite3.connect(":memory:")
+conn.enable_load_extension(True)
+conn.load_extension(usearch.sqlite)
+```
+
+## Postgres
+
+On MacOS:
+
+```sh
+brew install postgresql
+brew services start postgresql
+psql postgres
+```
+
+Now once you are connected to database:
+
+```sql
+CREATE FUNCTION copytext(text) RETURNS text
+    AS '/Users/av/github/usearch-unum/python/usearch/compiled.cpython-310-darwin.so', 'copytext'
+    LANGUAGE C STRICT;
+```

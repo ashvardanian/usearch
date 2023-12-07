@@ -1,13 +1,14 @@
 import os
 import sys
 import subprocess
-from setuptools import setup
+from setuptools import setup, Extension
 
 from pybind11.setup_helpers import Pybind11Extension
 
 compile_args = []
 link_args = []
 macros_args = []
+include_dirs = ["include"]
 
 
 def get_bool_env(name: str, preference: bool) -> bool:
@@ -16,6 +17,10 @@ def get_bool_env(name: str, preference: bool) -> bool:
 
 def get_bool_env_w_name(name: str, preference: bool) -> tuple:
     return name, "1" if get_bool_env(name, preference) else "0"
+
+
+def call_system(*args) -> str:
+    return subprocess.check_output(args).strip().decode()
 
 
 # Check the environment variables
@@ -40,19 +45,28 @@ if is_linux:
 prefer_simsimd: bool = is_linux or is_macos
 prefer_fp16lib: bool = True
 prefer_openmp: bool = is_linux and is_gcc
+prefer_stringzilla: bool = True
 
 use_simsimd: bool = get_bool_env("USEARCH_USE_SIMSIMD", prefer_simsimd)
 use_fp16lib: bool = get_bool_env("USEARCH_USE_FP16LIB", prefer_fp16lib)
 use_openmp: bool = get_bool_env("USEARCH_USE_OPENMP", prefer_openmp)
-
+use_stringzilla: bool = get_bool_env("USEARCH_USE_STRINGZILLA", prefer_stringzilla)
 
 # Common arguments for all platforms
 macros_args.append(("USEARCH_USE_OPENMP", "1" if use_openmp else "0"))
 macros_args.append(("USEARCH_USE_SIMSIMD", "1" if use_simsimd else "0"))
 macros_args.append(("USEARCH_USE_FP16LIB", "1" if use_fp16lib else "0"))
+macros_args.append(("USEARCH_USE_STRINGZILLA", "1" if use_stringzilla else "0"))
+
+if use_simsimd:
+    include_dirs.append("simsimd/include")
+if use_fp16lib:
+    include_dirs.append("fp16/include")
+if use_stringzilla:
+    include_dirs.append("stringzilla/include")
 
 if is_linux:
-    compile_args.append("-std=c++17")
+    # compile_args.append("-std=c++17")
     compile_args.append("-O3")  # Maximize performance
     compile_args.append("-ffast-math")  # Maximize floating-point performance
     compile_args.append("-Wno-unknown-pragmas")
@@ -79,7 +93,7 @@ if is_macos:
     # MacOS 10.15 or higher is needed for `aligned_alloc` support.
     # https://github.com/unum-cloud/usearch/actions/runs/4975434891/jobs/8902603392
     compile_args.append("-mmacosx-version-min=10.15")
-    compile_args.append("-std=c++17")
+    # compile_args.append("-std=c++17")
     compile_args.append("-O3")  # Maximize performance
     compile_args.append("-ffast-math")  # Maximize floating-point performance
     compile_args.append("-fcolor-diagnostics")
@@ -87,6 +101,14 @@ if is_macos:
 
     # Simplify debugging, but the normal `-g` may make builds much longer!
     compile_args.append("-g1")
+
+    # For Postgres we need to link
+    pg_libdir = call_system("pg_config", "--libdir")
+    link_args.append(f"-L{pg_libdir}")
+    # Linking against all of those libraries is hard
+    # link_args.extend(call_system("pg_config", "--libs").split())
+    include_dirs.extend(call_system("pg_config", "--includedir-server").split())
+    compile_args.append("-bundle -flat_namespace -undefined suppress")
 
     # Linking OpenMP requires additional preparation in CIBuildWheel.
     # We must install `brew install llvm` ahead of time.
@@ -136,6 +158,23 @@ ext_modules = [
         extra_compile_args=compile_args,
         extra_link_args=link_args,
         define_macros=macros_args,
+        include_dirs=include_dirs,
+    ),
+    Extension(
+        "usearch_sqlite",
+        ["python/lib_sqlite.cpp"],
+        extra_compile_args=compile_args,
+        extra_link_args=link_args,
+        define_macros=macros_args,
+        include_dirs=include_dirs,
+    ),
+    Extension(
+        "usearch_postgres",
+        ["python/lib_postgres.c"],
+        extra_compile_args=compile_args,
+        extra_link_args=link_args,
+        define_macros=macros_args,
+        include_dirs=include_dirs,
     ),
 ]
 
@@ -146,16 +185,6 @@ this_directory = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(this_directory, "README.md")) as f:
     long_description = f.read()
 
-# Depending on the macros, adjust the include directories
-include_dirs = [
-    "include",
-    "python",
-    "stringzilla/stringzilla",
-]
-if use_simsimd:
-    include_dirs.append("simsimd/include")
-if use_fp16lib:
-    include_dirs.append("fp16/include")
 
 setup(
     name=__lib_name__,
@@ -189,7 +218,6 @@ setup(
         "Topic :: Database :: Database Engines/Servers",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
-    include_dirs=include_dirs,
     ext_modules=ext_modules,
     install_requires=["numpy"],
 )

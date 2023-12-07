@@ -79,6 +79,7 @@ def test_sqlite_distances_in_high_dimensions(num_vectors: int, ndim: int):
         assert math.isclose(similarity_json, similarity_f32, abs_tol=0.1)
         assert math.isclose(similarity_json, similarity_f16, abs_tol=0.1)
 
+
 @pytest.mark.parametrize("num_vectors", batch_sizes)
 def test_sqlite_distances_in_low_dimensions(num_vectors: int):
     conn = sqlite3.connect(":memory:")
@@ -114,7 +115,7 @@ def test_sqlite_distances_in_low_dimensions(num_vectors: int):
             """
             INSERT INTO vector_table (vector_d0, vector_d1, vector_d2, vector_d3) VALUES (?, ?, ?, ?)
         """,
-            (*vector),
+            (vector.tolist()),
         )
 
     # Commit changes
@@ -124,9 +125,10 @@ def test_sqlite_distances_in_low_dimensions(num_vectors: int):
     SELECT 
         a.id AS id1,
         b.id AS id2,
-        distance_cosine_f32(a.vector_d0, a.vector_d1, b.vector_d0, b.vector_d1) AS cosine_similarity_f32,
-        distance_cosine_f16(a.vector_d0, a.vector_d1, b.vector_d0, b.vector_d1) AS cosine_similarity_f16,
-        distance_haversine_meters(a.vector_d0, a.vector_d1, b.vector_d0, b.vector_d1) AS haversine_meters
+        distance_cosine_f32(a.vector_d0, a.vector_d1, b.vector_d0, b.vector_d1) AS cosine_f32,
+        distance_cosine_f16(a.vector_d0, a.vector_d1, b.vector_d0, b.vector_d1) AS cosine_f16,
+        distance_haversine_meters(a.vector_d0, a.vector_d1, b.vector_d0, b.vector_d1) AS haversine_meters,
+        distance_levenshtein(a.title, b.title) AS levenshtein
     FROM 
         vector_table AS a,
         vector_table AS b
@@ -135,7 +137,14 @@ def test_sqlite_distances_in_low_dimensions(num_vectors: int):
     """
     cursor.execute(similarities)
 
-    for a, b, similarity_f32, similarity_f16, haversine_meters in cursor.fetchall():
-        # assert math.isclose(similarity_json, similarity_f32, abs_tol=0.1)
-        # assert math.isclose(similarity_json, similarity_f16, abs_tol=0.1)
-        pass
+    for (
+        a,
+        b,
+        cosine_f32,
+        cosine_f16,
+        haversine,
+        levenshtein,
+    ) in cursor.fetchall():
+        # assert math.isclose(cosine_json, cosine_f32, abs_tol=0.1)
+        # assert math.isclose(cosine_json, cosine_f16, abs_tol=0.1)
+        print(a, b, cosine_f32, cosine_f16, haversine, levenshtein)

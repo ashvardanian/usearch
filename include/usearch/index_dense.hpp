@@ -1465,6 +1465,18 @@ class index_dense_gt {
         return result;
     }
 
+    /**
+     *  @brief  Adapts the Male-Optimal Stable Marriage algorithm for unequal sets
+     *          to perform fast one-to-one matching between two large collections
+     *          of vectors, using approximate nearest neighbors search.
+     *
+     *  @param[in] women Second index of vectors.
+     *  @param[in] config Matching settings controlling the accuracy/speed tradeoff.
+     *  @param[inout] man_to_woman Container to map ::first keys to ::second.
+     *  @param[inout] woman_to_man Container to map ::second keys to ::first.
+     *  @param[in] executor Thread-pool to execute the job in parallel.
+     *  @param[in] progress Callback to report the execution progress.
+     */
     template <                                                 //
         typename man_to_woman_at = dummy_key_to_key_mapping_t, //
         typename woman_to_man_at = dummy_key_to_key_mapping_t, //

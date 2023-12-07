@@ -120,6 +120,20 @@
 #define usearch_noexcept_m
 #endif
 
+#if defined(USEARCH_DEFINED_CPP17)
+#define USEARCH_MAYBE_UNUSED [[maybe_unused]]
+#elif defined(_MSC_VER) && !defined(__clang__)
+#define USEARCH_MAYBE_UNUSED
+#else
+#define USEARCH_MAYBE_UNUSED __attribute__((__unused__))
+#endif
+
+#if defined(WIN32) || defined(_WIN32)
+#define USEARCH_EXPORT __declspec(dllexport)
+#else
+#define USEARCH_EXPORT __attribute__((visibility("default")))
+#endif
+
 namespace unum {
 namespace usearch {
 

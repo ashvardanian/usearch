@@ -5,13 +5,17 @@
  *  @date       November 28, 2023
  *  @copyright  Copyright (c) 2023
  */
-#include <stringzilla.h>
-
 #include <charconv> // `std::from_chars`
 #include <cstdlib>  // `std::strtod`
 
+#include <stringzilla/stringzilla.h>
+#include <usearch/index_plugins.hpp>
+
 #include <sqlite3ext.h>
 SQLITE_EXTENSION_INIT1
+
+using namespace unum::usearch;
+using namespace unum;
 
 static sz_string_view_t temporary_memory = {NULL, 0};
 
@@ -49,7 +53,7 @@ static void sqlite_dense_export(sqlite3_context* context, int argc, sqlite3_valu
         }
 
         std::size_t dimensions = (size_t)(bytes1)*CHAR_BIT / bits_per_scalar(scalar_kind_ak);
-        metric_t metric = metric_t(dimensions, metric_kind_ak, scalar_kind_ak);
+        metric_punned_t metric = metric_punned_t(dimensions, metric_kind_ak, scalar_kind_ak);
         distance_punned_t distance =
             metric(reinterpret_cast<byte_t const*>(vec1), reinterpret_cast<byte_t const*>(vec2));
         *distance_out = distance;
@@ -126,7 +130,8 @@ static void sqlite_dense_export(sqlite3_context* context, int argc, sqlite3_valu
         }
 
         // Compute the distance itself
-        metric_t metric = metric_t(dimensions, metric_kind_ak, parsed_scalar_kind_gt<scalar_kind_ak>::kind);
+        metric_punned_t metric =
+            metric_punned_t(dimensions, metric_kind_ak, parsed_scalar_kind_gt<scalar_kind_ak>::kind);
         distance_punned_t distance =
             metric(reinterpret_cast<byte_t const*>(parsed1), reinterpret_cast<byte_t const*>(parsed2));
         *distance_out = distance;
@@ -155,7 +160,8 @@ static void sqlite_dense_export(sqlite3_context* context, int argc, sqlite3_valu
         }
 
         // Compute the distance itself
-        metric_t metric = metric_t(dimensions, metric_kind_ak, parsed_scalar_kind_gt<scalar_kind_ak>::kind);
+        metric_punned_t metric =
+            metric_punned_t(dimensions, metric_kind_ak, parsed_scalar_kind_gt<scalar_kind_ak>::kind);
         distance_punned_t distance =
             metric(reinterpret_cast<byte_t const*>(parsed1), reinterpret_cast<byte_t const*>(parsed2));
         *distance_out = distance;
@@ -220,9 +226,9 @@ static void cleanup_temporary_memory(void* userData) {
     }
 }
 
-extern "C" PYBIND11_MAYBE_UNUSED PYBIND11_EXPORT int sqlite3_compiled_init( //
-    sqlite3* db,                                                            //
-    char** error_message,                                                   //
+extern "C" USEARCH_MAYBE_UNUSED USEARCH_EXPORT int sqlite3_compiled_init( //
+    sqlite3* db,                                                          //
+    char** error_message,                                                 //
     sqlite3_api_routines const* api) {
     SQLITE_EXTENSION_INIT2(api)
 

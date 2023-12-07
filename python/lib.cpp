@@ -33,9 +33,6 @@ using namespace unum;
 namespace py = pybind11;
 using py_shape_t = py::array::ShapeContainer;
 
-using metric_t = metric_punned_t;
-using distance_t = distance_punned_t;
-
 using dense_key_t = typename index_dense_t::vector_key_t;
 using dense_add_result_t = typename index_dense_t::add_result_t;
 using dense_search_result_t = typename index_dense_t::search_result_t;
@@ -118,10 +115,10 @@ static dense_index_py_t make_index(             //
     config.multi = multi;
     config.enable_key_lookups = enable_key_lookups;
 
-    metric_t metric =  //
-        metric_uintptr //
-            ? metric_t(dimensions, metric_uintptr, metric_signature, metric_kind, scalar_kind)
-            : metric_t(dimensions, metric_kind, scalar_kind);
+    metric_punned_t metric = //
+        metric_uintptr       //
+            ? metric_punned_t(dimensions, metric_uintptr, metric_signature, metric_kind, scalar_kind)
+            : metric_punned_t(dimensions, metric_kind, scalar_kind);
     return index_dense_t::make(metric, config);
 }
 
@@ -247,7 +244,7 @@ template <typename scalar_at>
 static void search_typed(                                   //
     dense_index_py_t& index, py::buffer_info& vectors_info, //
     std::size_t wanted, bool exact, std::size_t threads,    //
-    py::array_t<dense_key_t>& keys_py, py::array_t<distance_t>& distances_py, py::array_t<Py_ssize_t>& counts_py,
+    py::array_t<dense_key_t>& keys_py, py::array_t<distance_punned_t>& distances_py, py::array_t<Py_ssize_t>& counts_py,
     std::atomic<std::size_t>& stats_visited_members, std::atomic<std::size_t>& stats_computed_distances,
     progress_func_t const& progress) {
 
@@ -307,7 +304,7 @@ template <typename scalar_at>
 static void search_typed(                                       //
     dense_indexes_py_t& indexes, py::buffer_info& vectors_info, //
     std::size_t wanted, bool exact, std::size_t threads,        //
-    py::array_t<dense_key_t>& keys_py, py::array_t<distance_t>& distances_py, py::array_t<Py_ssize_t>& counts_py,
+    py::array_t<dense_key_t>& keys_py, py::array_t<distance_punned_t>& distances_py, py::array_t<Py_ssize_t>& counts_py,
     std::atomic<std::size_t>& stats_visited_members, std::atomic<std::size_t>& stats_computed_distances,
     progress_func_t const& progress) {
 
@@ -418,7 +415,7 @@ static py::tuple search_many_in_index( //
         throw std::invalid_argument("The number of vector dimensions doesn't match!");
 
     py::array_t<dense_key_t> keys_py({vectors_count, static_cast<Py_ssize_t>(wanted)});
-    py::array_t<distance_t> distances_py({vectors_count, static_cast<Py_ssize_t>(wanted)});
+    py::array_t<distance_punned_t> distances_py({vectors_count, static_cast<Py_ssize_t>(wanted)});
     py::array_t<Py_ssize_t> counts_py(vectors_count);
     std::atomic<std::size_t> stats_visited_members(0);
     std::atomic<std::size_t> stats_computed_distances(0);
@@ -481,13 +478,14 @@ static py::tuple search_many_brute_force(       //
         throw std::invalid_argument("The types of vectors don't match!");
 
     std::size_t dimensions = static_cast<std::size_t>(queries_dimensions);
-    metric_t metric =  //
-        metric_uintptr //
-            ? metric_t(dimensions, metric_uintptr, metric_signature, metric_kind, queries_kind)
-            : metric_t(dimensions, metric_kind, queries_kind);
+    metric_punned_t metric = //
+        metric_uintptr       //
+            ? metric_punned_t(dimensions, metric_uintptr, metric_signature, metric_kind, queries_kind)
+            : metric_punned_t(dimensions, metric_kind, queries_kind);
 
     py::array_t<dense_key_t> keys_py({static_cast<Py_ssize_t>(queries_count), static_cast<Py_ssize_t>(wanted)});
-    py::array_t<distance_t> distances_py({static_cast<Py_ssize_t>(queries_count), static_cast<Py_ssize_t>(wanted)});
+    py::array_t<distance_punned_t> distances_py(
+        {static_cast<Py_ssize_t>(queries_count), static_cast<Py_ssize_t>(wanted)});
     py::array_t<Py_ssize_t> counts_py(static_cast<Py_ssize_t>(queries_count));
 
     auto keys_py2d = keys_py.template mutable_unchecked<2>();
@@ -519,7 +517,7 @@ static py::tuple search_many_brute_force(       //
     // Export the results
     for (std::size_t query_idx = 0; query_idx != queries_count; ++query_idx) {
         dense_key_t* query_keys = &keys_py2d(query_idx, 0);
-        distance_t* query_distances = &distances_py2d(query_idx, 0);
+        distance_punned_t* query_distances = &distances_py2d(query_idx, 0);
         auto query_result = offsets_and_distances.at(query_idx);
         for (std::size_t i = 0; i != wanted; ++i)
             query_keys[i] = static_cast<dense_key_t>(query_result[i].offset),
@@ -576,14 +574,14 @@ static py::tuple cluster_vectors(        //
         throw std::invalid_argument("The number of vector dimensions doesn't match!");
 
     py::array_t<dense_key_t> keys_py({Py_ssize_t(queries_count), Py_ssize_t(1)});
-    py::array_t<distance_t> distances_py({Py_ssize_t(queries_count), Py_ssize_t(1)});
+    py::array_t<distance_punned_t> distances_py({Py_ssize_t(queries_count), Py_ssize_t(1)});
     dense_clustering_result_t cluster_result;
     executor_default_t executor{threads};
 
     auto keys_py2d = keys_py.template mutable_unchecked<2>();
     auto distances_py2d = distances_py.template mutable_unchecked<2>();
     dense_key_t* keys_ptr = reinterpret_cast<dense_key_t*>(&keys_py2d(0, 0));
-    distance_t* distances_ptr = reinterpret_cast<distance_t*>(&distances_py2d(0, 0));
+    distance_punned_t* distances_ptr = reinterpret_cast<distance_punned_t*>(&distances_py2d(0, 0));
 
     index_dense_clustering_config_t config;
     config.min_clusters = min_count;
@@ -645,13 +643,13 @@ static py::tuple cluster_keys(                            //
     dense_key_t const* queries_end = queries_begin + queries_count;
 
     py::array_t<dense_key_t> keys_py({Py_ssize_t(queries_count), Py_ssize_t(1)});
-    py::array_t<distance_t> distances_py({Py_ssize_t(queries_count), Py_ssize_t(1)});
+    py::array_t<distance_punned_t> distances_py({Py_ssize_t(queries_count), Py_ssize_t(1)});
     executor_default_t executor{threads};
 
     auto keys_py2d = keys_py.template mutable_unchecked<2>();
     auto distances_py2d = distances_py.template mutable_unchecked<2>();
     dense_key_t* keys_ptr = reinterpret_cast<dense_key_t*>(&keys_py2d(0, 0));
-    distance_t* distances_ptr = reinterpret_cast<distance_t*>(&distances_py2d(0, 0));
+    distance_punned_t* distances_ptr = reinterpret_cast<distance_punned_t*>(&distances_py2d(0, 0));
 
     index_dense_clustering_config_t config;
     config.min_clusters = min_count;
@@ -935,7 +933,7 @@ PYBIND11_MODULE(compiled, m) {
     m.def(
         "hardware_acceleration",
         [](scalar_kind_t scalar_kind, std::size_t dimensions, metric_kind_t metric_kind) -> py::str {
-            return metric_t(dimensions, metric_kind, scalar_kind).isa_name();
+            return metric_punned_t(dimensions, metric_kind, scalar_kind).isa_name();
         },
         py::kw_only(),                                //
         py::arg("dtype") = scalar_kind_t::f32_k,      //
@@ -1094,10 +1092,10 @@ PYBIND11_MODULE(compiled, m) {
            std::uintptr_t metric_uintptr) {
             scalar_kind_t scalar_kind = index.scalar_kind();
             std::size_t dimensions = index.dimensions();
-            metric_t metric =  //
-                metric_uintptr //
-                    ? metric_t(dimensions, metric_uintptr, metric_signature, metric_kind, scalar_kind)
-                    : metric_t(dimensions, metric_kind, scalar_kind);
+            metric_punned_t metric = //
+                metric_uintptr       //
+                    ? metric_punned_t(dimensions, metric_uintptr, metric_signature, metric_kind, scalar_kind)
+                    : metric_punned_t(dimensions, metric_kind, scalar_kind);
             index.change_metric(std::move(metric));
         },
         py::arg("metric_kind") = metric_kind_t::cos_k,                          //
@@ -1136,8 +1134,8 @@ PYBIND11_MODULE(compiled, m) {
     i.def( //
         "pairwise_distances",
         [](dense_index_py_t const& index, py::array_t<dense_key_t> const& left_py,
-           py::array_t<dense_key_t> const& right_py) -> py::array_t<distance_t> {
-            py::array_t<distance_t> results_py(left_py.size());
+           py::array_t<dense_key_t> const& right_py) -> py::array_t<distance_punned_t> {
+            py::array_t<distance_punned_t> results_py(left_py.size());
             auto results_py1d = results_py.template mutable_unchecked<1>();
             auto left_py1d = left_py.template unchecked<1>();
             auto right_py1d = right_py.template unchecked<1>();
@@ -1147,7 +1145,8 @@ PYBIND11_MODULE(compiled, m) {
         });
 
     i.def( //
-        "pairwise_distance", [](dense_index_py_t const& index, dense_key_t left, dense_key_t right) -> distance_t {
+        "pairwise_distance",
+        [](dense_index_py_t const& index, dense_key_t left, dense_key_t right) -> distance_punned_t {
             return index.distance_between(left, right).min;
         });
 
@@ -1231,5 +1230,3 @@ PYBIND11_MODULE(compiled, m) {
         py::arg("progress") = nullptr                             //
     );
 }
-
-#include "lib_sqlite.cpp"
