@@ -191,8 +191,5 @@ setup(
     ],
     include_dirs=include_dirs,
     ext_modules=ext_modules,
-    install_requires=[
-        "numpy",
-        "tqdm",
-    ],
+    install_requires=["numpy"],
 )

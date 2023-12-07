@@ -21,7 +21,6 @@ from typing import (
 )
 
 import numpy as np
-from tqdm import tqdm
 
 # Precompiled symbols that won't be exposed directly:
 from usearch.compiled import (
@@ -188,6 +187,8 @@ def _search_in_compiled(
 
     # Create progress bar if needed
     if log:
+        from tqdm import tqdm
+
         name = log if isinstance(log, str) else "Search"
         progress_bar = tqdm(
             desc=name,
@@ -242,6 +243,8 @@ def _add_to_compiled(
 
     # Create progress bar if needed
     if log:
+        from tqdm import tqdm
+
         name = log if isinstance(log, str) else "Add"
         pbar = tqdm(
             desc=name,
