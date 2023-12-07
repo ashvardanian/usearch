@@ -1,16 +1,14 @@
 /**
- *  @file python.cpp
- *  @author Ash Vardanian
- *  @brief Python bindings for Unum USearch.
- *  @date 2023-04-26
- *
+ *  @brief      Python bindings for Unum USearch.
+ *  @file       lib.cpp
+ *  @author     Ash Vardanian
+ *  @date       April 26, 2023
+ *  @copyright  Copyright (c) 2023
  *
  *  https://pythoncapi.readthedocs.io/type_object.html
  *  https://numpy.org/doc/stable/reference/c-api/types-and-structures.html
  *  https://pythonextensionpatterns.readthedocs.io/en/latest/refcount.html
  *  https://docs.python.org/3/extending/newtypes_tutorial.html#adding-data-and-methods-to-the-basic-example
- *
- *  @copyright Copyright (c) 2023
  */
 #if !defined(__cpp_exceptions)
 #define __cpp_exceptions 1
@@ -445,6 +443,10 @@ static py::tuple search_many_in_index( //
     return results;
 }
 
+/**
+ *  @brief  Brute-force exact search implementation, compatible with
+ *          NumPy-like Tensors and other objects supporting Buffer Protocol.
+ */
 static py::tuple search_many_brute_force(       //
     py::buffer dataset, py::buffer queries,     //
     std::size_t wanted, std::size_t threads,    //
@@ -798,7 +800,7 @@ template <typename index_at> std::vector<typename index_at::stats_t> compute_lev
 }
 
 template <typename internal_at, typename external_at = internal_at, typename index_at = void>
-static py::tuple get_typed_vectors_for_keys(index_at const& index, py::buffer keys) {
+static py::object get_typed_vectors_for_keys(index_at const& index, py::buffer keys) {
 
     py::buffer_info keys_info = keys.request();
     if (keys_info.ndim != 1)
@@ -806,27 +808,37 @@ static py::tuple get_typed_vectors_for_keys(index_at const& index, py::buffer ke
 
     Py_ssize_t keys_count = keys_info.shape[0];
     byte_t const* keys_data = reinterpret_cast<byte_t const*>(keys_info.ptr);
-    py::tuple results(keys_count);
 
-    for (Py_ssize_t task_idx = 0; task_idx != keys_count; ++task_idx) {
-        dense_key_t key = *reinterpret_cast<dense_key_t const*>(keys_data + task_idx * keys_info.strides[0]);
-        std::size_t vectors_count = index.count(key);
-        if (!vectors_count) {
-            results[task_idx] = py::none();
-            continue;
+    if (index.multi()) {
+        py::tuple results(keys_count);
+
+        for (Py_ssize_t task_idx = 0; task_idx != keys_count; ++task_idx) {
+            dense_key_t key = *reinterpret_cast<dense_key_t const*>(keys_data + task_idx * keys_info.strides[0]);
+            std::size_t vectors_count = index.count(key);
+            if (!vectors_count) {
+                results[task_idx] = py::none();
+                continue;
+            }
+
+            py::array_t<external_at> result_py({static_cast<Py_ssize_t>(vectors_count), //
+                                                static_cast<Py_ssize_t>(index.scalar_words())});
+            auto result_py2d = result_py.template mutable_unchecked<2>();
+            index.get(key, (internal_at*)&result_py2d(0, 0), vectors_count);
+            results[task_idx] = result_py;
         }
-
-        py::array_t<external_at> result_py({static_cast<Py_ssize_t>(vectors_count), //
-                                            static_cast<Py_ssize_t>(index.scalar_words())});
+        return results;
+    } else {
+        py::array_t<external_at> result_py({keys_count, static_cast<Py_ssize_t>(index.scalar_words())});
         auto result_py2d = result_py.template mutable_unchecked<2>();
-        index.get(key, (internal_at*)&result_py2d(0, 0), vectors_count);
-        results[task_idx] = result_py;
+        for (Py_ssize_t task_idx = 0; task_idx != keys_count; ++task_idx) {
+            dense_key_t key = *reinterpret_cast<dense_key_t const*>(keys_data + task_idx * keys_info.strides[0]);
+            index.get(key, (internal_at*)&result_py2d(task_idx, 0), 1);
+        }
+        return result_py;
     }
-
-    return results;
 }
 
-template <typename index_at> py::tuple get_many(index_at const& index, py::buffer keys, scalar_kind_t scalar_kind) {
+template <typename index_at> py::object get_many(index_at const& index, py::buffer keys, scalar_kind_t scalar_kind) {
     if (scalar_kind == scalar_kind_t::f32_k)
         return get_typed_vectors_for_keys<f32_t>(index, keys);
     else if (scalar_kind == scalar_kind_t::f64_k)
@@ -851,6 +863,10 @@ PYBIND11_MODULE(compiled, m) {
     m.attr("USES_OPENMP") = py::int_(USEARCH_USE_OPENMP);
     m.attr("USES_SIMSIMD") = py::int_(USEARCH_USE_SIMSIMD);
     m.attr("USES_FP16LIB") = py::int_(USEARCH_USE_FP16LIB);
+
+    m.attr("VERSION_MAJOR") = py::int_(USEARCH_VERSION_MAJOR);
+    m.attr("VERSION_MINOR") = py::int_(USEARCH_VERSION_MINOR);
+    m.attr("VERSION_PATCH") = py::int_(USEARCH_VERSION_PATCH);
 
     py::enum_<metric_punned_signature_t>(m, "MetricSignature")
         .value("ArrayArray", metric_punned_signature_t::array_array_k)
@@ -1058,6 +1074,7 @@ PYBIND11_MODULE(compiled, m) {
 
     i.def("__len__", &dense_index_py_t::size);
     i.def_property_readonly("size", &dense_index_py_t::size);
+    i.def_property_readonly("multi", &dense_index_py_t::multi);
     i.def_property_readonly("connectivity", &dense_index_py_t::connectivity);
     i.def_property_readonly("capacity", &dense_index_py_t::capacity);
     i.def_property_readonly("ndim",
@@ -1214,3 +1231,5 @@ PYBIND11_MODULE(compiled, m) {
         py::arg("progress") = nullptr                             //
     );
 }
+
+#include "lib_sqlite.cpp"

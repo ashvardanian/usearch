@@ -11,7 +11,7 @@
 
 #define USEARCH_VERSION_MAJOR 2
 #define USEARCH_VERSION_MINOR 8
-#define USEARCH_VERSION_PATCH 10
+#define USEARCH_VERSION_PATCH 14
 
 // Inferring C++ version
 // https://stackoverflow.com/a/61552074
@@ -1942,7 +1942,7 @@ class index_gt {
     std::size_t connectivity() const noexcept { return config_.connectivity; }
     std::size_t capacity() const noexcept { return nodes_capacity_; }
     std::size_t size() const noexcept { return nodes_count_; }
-    std::size_t max_level() const noexcept { return static_cast<std::size_t>(max_level_); }
+    std::size_t max_level() const noexcept { return nodes_count_ ? static_cast<std::size_t>(max_level_) : 0; }
     index_config_t const& config() const noexcept { return config_; }
     index_limits_t const& limits() const noexcept { return limits_; }
     bool is_immutable() const noexcept { return bool(viewed_file_); }
